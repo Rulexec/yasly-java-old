@@ -43,10 +43,13 @@ public class VerboseSocketLogger implements ISocketLogger {
         return address.getAddress().getHostAddress() + ":" + address.getPort();
     }
 
-    private static void logBuffer(ByteBuffer buffer) {
+    public static void logBuffer(ByteBuffer buffer) {
         VerboseSocketLogger.logBytes(buffer.array(), buffer.arrayOffset(), buffer.limit());
     }
-    private static void logBytes(byte[] bytes, int offset, int length) {
+    public static void logBytes(byte[] bytes) {
+        VerboseSocketLogger.logBytes(bytes, 0, bytes.length);
+    }
+    public static void logBytes(byte[] bytes, int offset, int length) {
         int end = offset + length;
 
         int lineByte = 0;
@@ -65,7 +68,11 @@ public class VerboseSocketLogger implements ISocketLogger {
                 }
             }
 
-            System.out.print(Integer.toHexString(bytes[offset] & 0xff));
+            String hexString = Integer.toHexString(bytes[offset] & 0xff);
+
+            if (hexString.length() == 1) System.out.print('0');
+
+            System.out.print(hexString);
 
             lineByte++;
         }
