@@ -60,6 +60,15 @@ class SocketData {
             SocketSendData data = this.sendQueue.peek();
 
             ByteBuffer buffer = data.getBuffer();
+
+            if (buffer == null) {
+                // if IBufferProvider returns null, it means, that user don't want send packet.
+                data.sent();
+
+                this.sendQueue.poll();
+                continue;
+            }
+
             if (this.loggingBuffer == null) {
                 this.loggingBuffer = buffer.slice();
                 this.loggingBuffer.limit(buffer.limit() - buffer.position());
