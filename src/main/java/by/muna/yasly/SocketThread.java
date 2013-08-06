@@ -154,10 +154,10 @@ public class SocketThread {
 
         this.wakeupThread();
     }
-    void disconnect(SocketData socket) {
+    void disconnect(SocketData socket, boolean gracefully) {
         SocketChannel channel = socket.getChannel();
 
-        socket.close(true);
+        socket.close(gracefully);
 
         if (channel != null) {
             try {

@@ -93,7 +93,10 @@ public class SocketController {
     }
 
     public void disconnect() {
-        this.socketThread.disconnect(this.socket);
+        this.disconnect(true);
+    }
+    public void disconnect(boolean gracefully) {
+        this.socketThread.disconnect(this.socket, gracefully);
     }
 
     public void setOnConnectError(IConnectErrorListener listener) {
