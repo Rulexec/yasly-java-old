@@ -185,7 +185,7 @@ public class SocketThread {
         Queue<SocketData> exceptionHappenedSockets = new LinkedList<SocketData>();
 
         while (!this.isStop) {
-            while (!this.socketTasks.isEmpty()) {
+            while (!this.socketTasks.isEmpty() && !this.isStop) {
                 SocketTask task = this.socketTasks.poll();
 
                 switch (task.getType()) {
@@ -255,6 +255,8 @@ public class SocketThread {
                 }
 
                 for (SelectionKey key : this.selector.selectedKeys()) {
+                    if (this.isStop) break selection;
+
                     SocketChannel sc = (SocketChannel) key.channel();
                     SocketData socketData = sockets.get(sc);
 
