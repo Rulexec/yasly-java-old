@@ -39,7 +39,7 @@ public class VerboseSocketLogger implements ISocketLogger {
         System.out.println("Socket thread stopped gracefully.");
     }
 
-    private static String addressToString(InetSocketAddress address) {
+    public static String addressToString(InetSocketAddress address) {
         return address.getAddress().getHostAddress() + ":" + address.getPort();
     }
 

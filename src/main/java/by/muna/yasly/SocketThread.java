@@ -200,7 +200,8 @@ public class SocketThread {
                         SocketChannel newSocketChannel = SocketChannel.open();
                         newSocketChannel.configureBlocking(false);
 
-                        newSocketChannel.register(this.selector, SelectionKey.OP_CONNECT);
+                        SelectionKey selectionKey = newSocketChannel.register(this.selector, SelectionKey.OP_CONNECT);
+                        newConnectSocketData.setSelectionKey(selectionKey);
 
                         newSocketChannel.connect(newConnectAddress);
 
@@ -269,7 +270,11 @@ public class SocketThread {
                         if (key.isConnectable() && sc.finishConnect()) {
                             this.logger.onConnect(address);
 
-                            sc.register(selector, SelectionKey.OP_WRITE | SelectionKey.OP_READ);
+                            SelectionKey selectionKey = sc.register(
+                                selector,
+                                SelectionKey.OP_WRITE | SelectionKey.OP_READ
+                            );
+                            socketData.setSelectionKey(selectionKey);
                         }
 
                         if (key.isWritable()) {

@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.NotYetConnectedException;
+import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.util.LinkedList;
 import java.util.Queue;
@@ -14,7 +15,10 @@ import java.util.Queue;
 class SocketData {
     private InetSocketAddress address;
     private SocketController controller;
+
     private SocketChannel channel;
+    private SelectionKey selectionKey;
+
     private boolean closed = false;
     private boolean closedGracefully = false;
 
@@ -32,6 +36,9 @@ class SocketData {
 
     void setChannel(SocketChannel channel) {
         this.channel = channel;
+    }
+    void setSelectionKey(SelectionKey selectionKey) {
+        this.selectionKey = selectionKey;
     }
 
     boolean isClosed() {
@@ -56,6 +63,8 @@ class SocketData {
         this.send();
     }
     void send() throws IOException {
+        if (!this.selectionKey.isWritable()) return;
+
         while (!this.sendQueue.isEmpty()) {
             SocketSendData data = this.sendQueue.peek();
 
