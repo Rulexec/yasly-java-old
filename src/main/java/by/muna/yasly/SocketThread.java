@@ -239,7 +239,7 @@ public class SocketThread {
                         sockets.remove(disconnectChannel);
                     }
 
-                    this.logger.onDisconnect(disconnectSocketData.getAddress(), true);
+                    this.logger.onDisconnect(disconnectSocketData.getAddress(), disconnectSocketData.isClosedGracefully());
 
                     disconnectSocketData.getController().connectError(true);
                     break;
