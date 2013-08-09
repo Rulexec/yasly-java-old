@@ -2,6 +2,7 @@ package by.muna.yasly;
 
 import by.muna.yasly.SocketThread.SocketTask.SocketTaskConnect;
 import by.muna.yasly.SocketThread.SocketTask.SocketTaskDisconnect;
+import by.muna.yasly.SocketThread.SocketTask.SocketTaskExecute;
 import by.muna.yasly.SocketThread.SocketTask.SocketTaskSend;
 import by.muna.yasly.by.muna.yasly.exceptions.SocketClosedException;
 import by.muna.yasly.logging.ISocketLogger;
@@ -18,7 +19,7 @@ import java.util.concurrent.CountDownLatch;
 public class SocketThread {
     protected static class SocketTask {
         public static enum SocketTaskType {
-            CONNECT, SEND, DISCONNECT
+            CONNECT, SEND, DISCONNECT, EXECUTE
         }
 
         public static class SocketTaskConnect {
@@ -63,6 +64,18 @@ public class SocketThread {
             }
         }
 
+        public static class SocketTaskExecute {
+            private CancellableRunnable runnable;
+
+            public SocketTaskExecute(CancellableRunnable runnable) {
+                this.runnable = runnable;
+            }
+
+            public CancellableRunnable getRunnable() {
+                return this.runnable;
+            }
+        }
+
         private SocketTaskType type;
         private Object task;
 
@@ -79,6 +92,7 @@ public class SocketThread {
         public SocketTask(SocketTaskDisconnect task) {
             this(SocketTaskType.DISCONNECT, task);
         }
+        public SocketTask(SocketTaskExecute task) { this(SocketTaskType.EXECUTE, task); }
 
         public SocketTaskType getType() {
             return this.type;
@@ -140,6 +154,11 @@ public class SocketThread {
         try {
             this.thread.join();
         } catch (InterruptedException e) { e.printStackTrace(); }
+    }
+
+    public void execute(CancellableRunnable runnable) {
+        this.socketTasks.add(new SocketTask(new SocketTaskExecute(runnable)));
+        this.wakeupThread();
     }
 
     // method that called from SocketController
@@ -243,6 +262,12 @@ public class SocketThread {
 
                     disconnectSocketData.getController().connectError(true);
                     break;
+                case EXECUTE:
+                    CancellableRunnable runnable = ((SocketTaskExecute) task.getTask()).getRunnable();
+
+                    runnable.run();
+
+                    break;
                 default:
                     throw new RuntimeException("Unknown socket task: " + task.getType());
                 }
@@ -337,6 +362,12 @@ public class SocketThread {
                 if (disconnectChannel == null) {
                     disconnectSocketData.getController().connectError(true);
                 } // else channel in sockets map and will be closed/notified
+                break;
+            case EXECUTE:
+                CancellableRunnable runnable = ((SocketTaskExecute) task.getTask()).getRunnable();
+
+                runnable.cancelled();
+
                 break;
             }
         }
