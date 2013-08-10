@@ -240,7 +240,15 @@ public class SocketThread {
                     }
 
                     try {
-                        sendSocketData.addSendData(sendTask.getData());
+                        if (!sendSocketData.addSendData(sendTask.getData())) {
+                            SelectionKey key = sendSocketData.getSelectionKey();
+                            if ((key.interestOps() & SelectionKey.OP_CONNECT) == 0) {
+                                sendSocketData.setSelectionKey(
+                                    sendSocketData.getChannel().register(selector,
+                                        SelectionKey.OP_READ | SelectionKey.OP_WRITE)
+                                );
+                            }
+                        }
                     } catch (IOException e) {
                         exceptionHappenedSockets.add(sendSocketData);
                     }
@@ -280,7 +288,10 @@ public class SocketThread {
                     throw new RuntimeException("Selector select exception", e);
                 }
 
-                for (SelectionKey key : this.selector.selectedKeys()) {
+                Iterator<SelectionKey> keys = this.selector.selectedKeys().iterator();
+                while (keys.hasNext()) {
+                    SelectionKey key = keys.next();
+
                     if (this.isStop) break selection;
 
                     SocketChannel sc = (SocketChannel) key.channel();
@@ -292,18 +303,25 @@ public class SocketThread {
                     try {
                         if (socketData.isClosedGracefully()) throw new SocketClosedException();
 
-                        if (key.isConnectable() && sc.finishConnect()) {
+                        if ((key.interestOps() & SelectionKey.OP_CONNECT) != 0 && key.isConnectable() && sc.finishConnect()) {
                             this.logger.onConnect(address);
 
-                            SelectionKey selectionKey = sc.register(
-                                selector,
-                                SelectionKey.OP_WRITE | SelectionKey.OP_READ
-                            );
+                            socketData.getController().connected();
+
+                            int interest;
+
+                            if (socketData.isSendQueueEmpty()) {
+                                interest = SelectionKey.OP_READ;
+                            } else {
+                                interest = SelectionKey.OP_WRITE | SelectionKey.OP_READ;
+                            }
+
+                            SelectionKey selectionKey = sc.register(selector, interest);
                             socketData.setSelectionKey(selectionKey);
                         }
 
-                        if (key.isWritable()) {
-                            socketData.send();
+                        if (socketData.send()) {
+                            socketData.setSelectionKey(sc.register(selector, SelectionKey.OP_READ));
                         }
 
                         if (key.isReadable()) {

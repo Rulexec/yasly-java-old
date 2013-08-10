@@ -40,12 +40,19 @@ class SocketData {
     void setSelectionKey(SelectionKey selectionKey) {
         this.selectionKey = selectionKey;
     }
+    SelectionKey getSelectionKey() {
+        return this.selectionKey;
+    }
 
     boolean isClosed() {
         return this.closed;
     }
     boolean isClosedGracefully() {
         return this.closedGracefully;
+    }
+
+    boolean isSendQueueEmpty() {
+        return this.sendQueue.isEmpty();
     }
 
     void close(boolean gracefully) {
@@ -58,12 +65,12 @@ class SocketData {
             data.connectError(gracefully);
         }
     }
-    void addSendData(SocketSendData sendData) throws IOException {
+    boolean addSendData(SocketSendData sendData) throws IOException {
         this.sendQueue.add(sendData);
-        this.send();
+        return this.send();
     }
-    void send() throws IOException {
-        if (!this.selectionKey.isWritable()) return;
+    boolean send() throws IOException {
+        if (!this.selectionKey.isWritable()) return false;
 
         while (!this.sendQueue.isEmpty()) {
             SocketSendData data = this.sendQueue.peek();
@@ -105,6 +112,8 @@ class SocketData {
 
             if (writed == 0) break;
         }
+
+        return this.sendQueue.isEmpty();
     }
     void receive() throws SocketClosedException {
         this.getController().data(this.channel);

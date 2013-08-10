@@ -9,7 +9,7 @@ import java.nio.channels.SocketChannel;
 import java.util.concurrent.CountDownLatch;
 
 public class SocketController {
-    private IConnectErrorListener connectErrorListener;
+    private IConnectionListener connectListener;
     private IDataListener dataListener;
 
     private CountDownLatch connectErrorListenerSet = new CountDownLatch(1);
@@ -32,6 +32,9 @@ public class SocketController {
         this.socket = socket;
     }
 
+    void connected() {
+        this.connectListener.onConnected(this);
+    }
     void connectError(boolean graceful) {
         if (this.connectErrorTelled) return;
         else this.connectErrorTelled = true;
@@ -40,7 +43,7 @@ public class SocketController {
             this.connectErrorListenerSet.await();
         } catch (InterruptedException e) {}
 
-        this.connectErrorListener.onConnectError(this, graceful);
+        this.connectListener.onConnectError(this, graceful);
     }
 
     boolean data(final SocketChannel sc) throws SocketClosedException {
@@ -99,9 +102,9 @@ public class SocketController {
         this.socketThread.disconnect(this.socket, gracefully);
     }
 
-    public void setOnConnectError(IConnectErrorListener listener) {
+    public void setConnectionListener(IConnectionListener listener) {
         this.connectErrorListenerSet.countDown();
-        this.connectErrorListener = listener;
+        this.connectListener = listener;
     }
     public void setOnData(IDataListener listener) {
         this.dataListenerSet.countDown();
