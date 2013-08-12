@@ -219,14 +219,25 @@ public class SocketThread {
                         SocketChannel newSocketChannel = SocketChannel.open();
                         newSocketChannel.configureBlocking(false);
 
-                        SelectionKey selectionKey = newSocketChannel.register(this.selector, SelectionKey.OP_CONNECT);
-                        newConnectSocketData.setSelectionKey(selectionKey);
+                        int interest;
 
-                        newSocketChannel.connect(newConnectAddress);
+                        if (newSocketChannel.connect(newConnectAddress)) {
+                            if (!newSocketChannel.isConnected()) {
+                                throw new SocketClosedException();
+                            } else {
+                                interest = SelectionKey.OP_READ;
+                            }
+                        } else {
+                            interest = SelectionKey.OP_CONNECT | SelectionKey.OP_READ;
+                        }
+
+                        SelectionKey selectionKey = newSocketChannel.register(this.selector, interest);
+                        newConnectSocketData.setSelectionKey(selectionKey);
 
                         newConnectSocketData.setChannel(newSocketChannel);
                         sockets.put(newSocketChannel, newConnectSocketData);
                     } catch (IOException e) {
+                        newConnectSocketData.closed();
                         exceptionHappenedSockets.add(newConnectSocketData);
                     }
                     break;
@@ -243,10 +254,7 @@ public class SocketThread {
                         if (!sendSocketData.addSendData(sendTask.getData())) {
                             SelectionKey key = sendSocketData.getSelectionKey();
                             if ((key.interestOps() & SelectionKey.OP_CONNECT) == 0) {
-                                sendSocketData.setSelectionKey(
-                                    sendSocketData.getChannel().register(selector,
-                                        SelectionKey.OP_READ | SelectionKey.OP_WRITE)
-                                );
+                                key.interestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE);
                             }
                         }
                     } catch (IOException e) {
@@ -281,6 +289,8 @@ public class SocketThread {
                 }
             }
 
+            this.handleExceptionHappenedSockets(exceptionHappenedSockets, sockets);
+
             selection: {
                 try {
                     if (this.selector.select() == 0) break selection;
@@ -291,8 +301,7 @@ public class SocketThread {
                 Iterator<SelectionKey> keys = this.selector.selectedKeys().iterator();
                 while (keys.hasNext()) {
                     SelectionKey key = keys.next();
-
-                    if (this.isStop) break selection;
+                    keys.remove();
 
                     SocketChannel sc = (SocketChannel) key.channel();
                     SocketData socketData = sockets.get(sc);
@@ -316,12 +325,11 @@ public class SocketThread {
                                 interest = SelectionKey.OP_WRITE | SelectionKey.OP_READ;
                             }
 
-                            SelectionKey selectionKey = sc.register(selector, interest);
-                            socketData.setSelectionKey(selectionKey);
+                            key.interestOps(interest);
                         }
 
                         if (socketData.send()) {
-                            socketData.setSelectionKey(sc.register(selector, SelectionKey.OP_READ));
+                            key.interestOps(SelectionKey.OP_READ);
                         }
 
                         if (key.isReadable()) {
@@ -333,28 +341,7 @@ public class SocketThread {
                 }
             }
 
-            while (!exceptionHappenedSockets.isEmpty()) {
-                SocketData socketData = exceptionHappenedSockets.poll();
-                SocketChannel channel = socketData.getChannel();
-
-                InetSocketAddress address = socketData.getAddress();
-
-                boolean gracefully = socketData.isClosedGracefully();
-
-                if (channel != null) {
-                    try { channel.close(); } catch (IOException ex) { ex.printStackTrace(); }
-                }
-
-                if (!gracefully) {
-                    this.logger.onDisconnect(address, false);
-
-                    socketData.getController().connectError(false);
-                }
-
-                socketData.close(false);
-
-                sockets.remove(channel);
-            }
+            this.handleExceptionHappenedSockets(exceptionHappenedSockets, sockets);
         }
 
         while (!this.socketTasks.isEmpty()) {
@@ -403,5 +390,37 @@ public class SocketThread {
         }
 
         this.logger.onStop(this);
+    }
+
+    private void handleExceptionHappenedSockets(
+        Queue<SocketData> exceptionHappenedSockets, Map<SocketChannel, SocketData> sockets
+    ) {
+        while (!exceptionHappenedSockets.isEmpty()) {
+            SocketData socketData = exceptionHappenedSockets.poll();
+            SocketChannel channel = socketData.getChannel();
+            SelectionKey selectionKey = socketData.getSelectionKey();
+
+            InetSocketAddress address = socketData.getAddress();
+
+            boolean gracefully = socketData.isClosedGracefully();
+
+            if (selectionKey != null) {
+                selectionKey.cancel();
+            }
+
+            if (channel != null) {
+                try { channel.close(); } catch (IOException ex) { ex.printStackTrace(); }
+            }
+
+            if (!gracefully) {
+                this.logger.onDisconnect(address, false);
+
+                socketData.getController().connectError(false);
+            }
+
+            socketData.close(false);
+
+            sockets.remove(channel);
+        }
     }
 }

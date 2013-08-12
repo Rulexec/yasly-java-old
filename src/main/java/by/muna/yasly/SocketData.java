@@ -55,6 +55,9 @@ class SocketData {
         return this.sendQueue.isEmpty();
     }
 
+    void closed() {
+        this.closed = true;
+    }
     void close(boolean gracefully) {
         this.closed = true;
         if (gracefully) this.closedGracefully = true;
@@ -70,6 +73,8 @@ class SocketData {
         return this.send();
     }
     boolean send() throws IOException {
+        if (this.closed) throw new SocketClosedException();
+
         if (!this.selectionKey.isWritable()) return false;
 
         while (!this.sendQueue.isEmpty()) {
@@ -94,11 +99,10 @@ class SocketData {
 
             try {
                 writed = this.channel.write(buffer);
-            } catch (NotYetConnectedException e) {
-                break;
+            } catch (Exception e) {
+                throw new SocketClosedException();
             }
 
-            // will be called .close(false)
             if (writed == -1) throw new SocketClosedException();
 
             if (!buffer.hasRemaining()) {

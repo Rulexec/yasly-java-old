@@ -12,7 +12,7 @@ public class SocketController {
     private IConnectionListener connectListener;
     private IDataListener dataListener;
 
-    private CountDownLatch connectErrorListenerSet = new CountDownLatch(1);
+    private CountDownLatch connectionListenerSet = new CountDownLatch(1);
     private CountDownLatch dataListenerSet = new CountDownLatch(1);
 
     private SocketThread socketThread;
@@ -33,6 +33,10 @@ public class SocketController {
     }
 
     void connected() {
+        try {
+            this.connectionListenerSet.await();
+        } catch (InterruptedException e) { e.printStackTrace(); }
+
         this.connectListener.onConnected(this);
     }
     void connectError(boolean graceful) {
@@ -40,8 +44,8 @@ public class SocketController {
         else this.connectErrorTelled = true;
 
         try {
-            this.connectErrorListenerSet.await();
-        } catch (InterruptedException e) {}
+            this.connectionListenerSet.await();
+        } catch (InterruptedException e) { e.printStackTrace(); }
 
         this.connectListener.onConnectError(this, graceful);
     }
@@ -49,7 +53,7 @@ public class SocketController {
     boolean data(final SocketChannel sc) throws SocketClosedException {
         try {
             this.dataListenerSet.await();
-        } catch (InterruptedException e) {}
+        } catch (InterruptedException e) { e.printStackTrace(); }
 
         class SocketIndicator {
             boolean isClosed = false;
@@ -66,7 +70,7 @@ public class SocketController {
                 int readed;
                 try {
                     readed = sc.read(buffer);
-                } catch (IOException e) {
+                } catch (Exception e) {
                     indicator.isClosed = true;
                     return 0;
                 }
@@ -103,11 +107,11 @@ public class SocketController {
     }
 
     public void setConnectionListener(IConnectionListener listener) {
-        this.connectErrorListenerSet.countDown();
         this.connectListener = listener;
+        this.connectionListenerSet.countDown();
     }
     public void setOnData(IDataListener listener) {
-        this.dataListenerSet.countDown();
         this.dataListener = listener;
+        this.dataListenerSet.countDown();
     }
 }
