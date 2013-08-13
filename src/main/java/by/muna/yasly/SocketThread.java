@@ -202,6 +202,9 @@ public class SocketThread {
 
         Map<SocketChannel, SocketData> sockets = new WeakHashMap<SocketChannel, SocketData>();
         Queue<SocketData> exceptionHappenedSockets = new LinkedList<SocketData>();
+        Queue<SocketData> awaitingToConnect = new LinkedList<SocketData>();
+
+        final int CONNECT_TIMEOUT = 5000;
 
         while (!this.isStop) {
             while (!this.socketTasks.isEmpty() && !this.isStop) {
@@ -236,8 +239,10 @@ public class SocketThread {
 
                         newConnectSocketData.setChannel(newSocketChannel);
                         sockets.put(newSocketChannel, newConnectSocketData);
+
+                        newConnectSocketData.connectStarted();
+                        awaitingToConnect.add(newConnectSocketData);
                     } catch (IOException e) {
-                        newConnectSocketData.closed();
                         exceptionHappenedSockets.add(newConnectSocketData);
                     }
                     break;
@@ -253,8 +258,16 @@ public class SocketThread {
                     try {
                         if (!sendSocketData.addSendData(sendTask.getData())) {
                             SelectionKey key = sendSocketData.getSelectionKey();
-                            if ((key.interestOps() & SelectionKey.OP_CONNECT) == 0) {
-                                key.interestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE);
+
+                            int oldOnterestOps = key.interestOps();
+
+                            key.interestOps(oldOnterestOps | SelectionKey.OP_WRITE);
+
+                            if ((oldOnterestOps & SelectionKey.OP_CONNECT) != 0) {
+                                int elapsed = (int) (System.currentTimeMillis() - sendSocketData.getStartConnectTime());
+                                if (elapsed > CONNECT_TIMEOUT) {
+                                    throw new SocketClosedException();
+                                }
                             }
                         }
                     } catch (IOException e) {
@@ -274,7 +287,9 @@ public class SocketThread {
                         sockets.remove(disconnectChannel);
                     }
 
-                    this.logger.onDisconnect(disconnectSocketData.getAddress(), disconnectSocketData.isClosedGracefully());
+                    this.logger.onDisconnect(
+                        disconnectSocketData.getAddress(), disconnectSocketData.isClosedGracefully()
+                    );
 
                     disconnectSocketData.getController().connectError(true);
                     break;
@@ -293,7 +308,27 @@ public class SocketThread {
 
             selection: {
                 try {
-                    if (this.selector.select() == 0) break selection;
+                    if (awaitingToConnect.isEmpty()) {
+                        if (this.selector.select() == 0) break selection;
+                    } else {
+                        int selected = this.selector.select(CONNECT_TIMEOUT);
+
+                        while (!awaitingToConnect.isEmpty()) {
+                            SocketData timeoutedSocket = awaitingToConnect.poll();
+                            SelectionKey key = timeoutedSocket.getSelectionKey();
+
+                            int elapsed = (int) (System.currentTimeMillis() - timeoutedSocket.getStartConnectTime());
+                            if (elapsed < CONNECT_TIMEOUT) break;
+
+                            if ((key.interestOps() & SelectionKey.OP_CONNECT) != 0 &&
+                                !key.isConnectable())
+                            {
+                                exceptionHappenedSockets.add(timeoutedSocket);
+                            }
+                        }
+
+                        if (selected == 0) break selection;
+                    }
                 } catch (IOException e) {
                     throw new RuntimeException("Selector select exception", e);
                 }
@@ -397,6 +432,8 @@ public class SocketThread {
     ) {
         while (!exceptionHappenedSockets.isEmpty()) {
             SocketData socketData = exceptionHappenedSockets.poll();
+            socketData.closed();
+
             SocketChannel channel = socketData.getChannel();
             SelectionKey selectionKey = socketData.getSelectionKey();
 
@@ -418,7 +455,7 @@ public class SocketThread {
                 socketData.getController().connectError(false);
             }
 
-            socketData.close(false);
+            socketData.close(gracefully);
 
             sockets.remove(channel);
         }

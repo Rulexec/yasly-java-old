@@ -27,6 +27,8 @@ class SocketData {
     private ISocketLogger logger;
     private ByteBuffer loggingBuffer;
 
+    private long startConnectTime;
+
     public SocketData(SocketThread socketThread, InetSocketAddress address, SocketController controller) {
         this.address = address;
         this.controller = controller;
@@ -49,6 +51,13 @@ class SocketData {
     }
     boolean isClosedGracefully() {
         return this.closedGracefully;
+    }
+
+    long getStartConnectTime() {
+        return this.startConnectTime;
+    }
+    void connectStarted() {
+        this.startConnectTime = System.currentTimeMillis();
     }
 
     boolean isSendQueueEmpty() {
